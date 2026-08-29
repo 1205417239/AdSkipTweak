@@ -11,6 +11,14 @@ static BOOL returnNo(id self, SEL _cmd) {
     return NO;
 }
 
+// 辅助：获取keyWindow（兼容iOS13+）
+UIWindow *getKeyWindow() {
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w.isKeyWindow) return w;
+    }
+    return [UIApplication sharedApplication].windows.firstObject;
+}
+
 //Find almost function that contains ads in almost games apps
 void hookMethods() {
     MSHookMessageEx(objc_getClass("GADAdSource"), @selector(invalidated), (IMP)returnNo, NULL);
@@ -212,11 +220,12 @@ static void initialize() {
             %orig(@"0秒后发放");
             // 延迟尝试点击关闭/跳过按钮
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                UIWindow *win = [UIApplication sharedApplication].keyWindow;
+                UIWindow *win = getKeyWindow();
                 UIViewController *vc = win.rootViewController;
                 while (vc.presentedViewController) vc = vc.presentedViewController;
                 // 递归查找按钮
-                void (^findBtn)(UIView *) = ^(UIView *view) {
+                __block void (^findBtn)(UIView *);
+                findBtn = ^(UIView *view) {
                     for (UIView *sub in view.subviews) {
                         if ([sub isKindOfClass:[UIButton class]]) {
                             UIButton *btn = (UIButton *)sub;
@@ -263,11 +272,12 @@ static void initialize() {
     %orig;
     // 延迟检测弹窗，自动关闭
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *win = [UIApplication sharedApplication].keyWindow;
+        UIWindow *win = getKeyWindow();
         if (!win) return;
 
         __block BOOL foundPopup = NO;
-        void (^scanView)(UIView *) = ^(UIView *view) {
+        __block void (^scanView)(UIView *);
+        scanView = ^(UIView *view) {
             if (foundPopup) return;
             for (UIView *sub in view.subviews) {
                 if (foundPopup) break;
@@ -276,7 +286,8 @@ static void initialize() {
                     if (lab.text && ([lab.text containsString:@"更快拿奖"] || [lab.text containsString:@"浏览广告"] || [lab.text containsString:@"秒更快"])) {
                         foundPopup = YES;
                         // 找到弹窗，先尝试点关闭按钮(X)
-                        void (^findClose)(UIView *) = ^(UIView *v) {
+                        __block void (^findClose)(UIView *);
+                        findClose = ^(UIView *v) {
                             for (UIView *s in v.subviews) {
                                 if ([s isKindOfClass:[UIButton class]]) {
                                     UIButton *btn = (UIButton *)s;
