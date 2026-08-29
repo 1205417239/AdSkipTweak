@@ -205,12 +205,24 @@ static void initialize() {
 %hook AVPlayer
 
 - (void)setRate:(float)rate {
- %orig(rate * 600.0f);
+    if (rate > 0) {
+        // 正常播放时加速600倍
+        %orig(rate * 600.0f);
+    } else {
+        // 阻止暂停！rate=0时强制改成600，弹窗暂停也没用
+        %orig(600.0f);
+    }
 }
 
 - (float)rate{
  float r = %orig;
  return r * 0.5f;
+}
+
+- (void)pause {
+    // 不执行暂停，强制恢复播放并加速
+    [self play];
+    [self setRate:600.0f];
 }
 
 %end
