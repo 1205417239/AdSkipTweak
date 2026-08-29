@@ -192,7 +192,8 @@ static void initialize() {
 }
 
 - (float)rate{
- return %orig() * 0.5f;
+ float r = %orig;
+ return r * 0.5f;
 }
 
 %end
