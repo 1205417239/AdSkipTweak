@@ -230,8 +230,9 @@ static void initialize() {
     %orig;
     // 延迟设置rate，确保播放器已准备好
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (self.rate > 0.0f && self.rate <= 1.0f) {
-            self.rate = 16.0f;
+        float curRate = [self rate];
+        if (curRate > 0.0f && curRate <= 1.0f) {
+            [self setRate:16.0f];
         }
     });
 }
