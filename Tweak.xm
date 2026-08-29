@@ -219,7 +219,7 @@ static void initialize() {
                         if ([sub isKindOfClass:[UIButton class]]) {
                             UIButton *btn = (UIButton *)sub;
                             NSString *t = btn.titleLabel.text;
-                            if (t && ([t containsString:@"跳过"] || [t containsString:@"关闭"] || [t containsString:@"我要更快拿奖"] || [t containsString:@"Skip"])) {
+                            if (t && ([t containsString:@"跳过"] || [t containsString:@"关闭"] || [t containsString:@"Skip"])) {
                                 [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
                                 return;
                             }
@@ -254,40 +254,57 @@ static void initialize() {
 
 %end
 
-// ===== 增强：弹窗自动处理（检测到"更快拿奖"弹窗自动点按钮） =====
+// ===== 增强：弹窗自动关闭（检测到弹窗直接关掉，露出下面广告界面） =====
 %hook UIViewController
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-    // 延迟检测弹窗内容
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // 延迟检测弹窗，自动关闭
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIWindow *win = [UIApplication sharedApplication].keyWindow;
+        if (!win) return;
+
+        __block BOOL foundPopup = NO;
         void (^scanView)(UIView *) = ^(UIView *view) {
+            if (foundPopup) return;
             for (UIView *sub in view.subviews) {
+                if (foundPopup) break;
                 if ([sub isKindOfClass:[UILabel class]]) {
                     UILabel *lab = (UILabel *)sub;
-                    if (lab.text && ([lab.text containsString:@"更快拿奖"] || [lab.text containsString:@"浏览广告"])) {
-                        // 找到弹窗，自动点按钮
-                        void (^findBtn)(UIView *) = ^(UIView *v) {
+                    if (lab.text && ([lab.text containsString:@"更快拿奖"] || [lab.text containsString:@"浏览广告"] || [lab.text containsString:@"秒更快"])) {
+                        foundPopup = YES;
+                        // 找到弹窗，先尝试点关闭按钮(X)
+                        void (^findClose)(UIView *) = ^(UIView *v) {
                             for (UIView *s in v.subviews) {
                                 if ([s isKindOfClass:[UIButton class]]) {
                                     UIButton *btn = (UIButton *)s;
-                                    if (btn.titleLabel.text && [btn.titleLabel.text containsString:@"更快拿奖"]) {
+                                    NSString *t = btn.titleLabel.text;
+                                    // 关闭按钮通常没有文字，是X图标，或者accessibilityLabel含"关闭"
+                                    if ((t && ([t containsString:@"关闭"] || [t containsString:@"Skip"] || [t isEqualToString:@"×"] || [t isEqualToString:@"X"])) ||
+                                        (btn.accessibilityLabel && [btn.accessibilityLabel containsString:@"关闭"])) {
                                         [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
                                         return;
                                     }
                                 }
-                                findBtn(s);
+                                findClose(s);
                             }
                         };
-                        findBtn(view);
+                        findClose(view);
+                        // 如果没点到关闭按钮，直接dismiss当前弹窗
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            UIViewController *top = win.rootViewController;
+                            while (top.presentedViewController) top = top.presentedViewController;
+                            if (top && top.presentingViewController) {
+                                [top dismissViewControllerAnimated:NO completion:nil];
+                            }
+                        });
                         return;
                     }
                 }
                 scanView(sub);
             }
         };
-        UIWindow *win = [UIApplication sharedApplication].keyWindow;
-        if (win) scanView(win);
+        scanView(win);
     });
 }
 
