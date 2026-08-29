@@ -197,3 +197,98 @@ static void initialize() {
 }
 
 %end
+// ===== 增强：倒计时Label直接修改 =====
+%hook UILabel
+
+- (void)setText:(NSString *)text {
+    if (text && text.length > 0) {
+        // 匹配各种倒计时模式: "30秒后发放" "剩余30秒" "30s" "00:30" "30秒"
+        NSRegularExpression *reg = [NSRegularExpression regularExpressionWithPattern:@"(\\d+)\\s*秒.*发放|剩余\\s*(\\d+)\\s*秒|(\\d+)\\s*秒|(\\d+)\\s*s|\\d+:\\d+" options:0 error:nil];
+        NSTextCheckingResult *res = [reg firstMatchInString:text options:0 range:NSMakeRange(0, text.length)];
+        if (res) {
+            // 直接改成0，让倒计时瞬间结束
+            %orig(@"0秒后发放");
+            // 延迟尝试点击关闭/跳过按钮
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                UIWindow *win = [UIApplication sharedApplication].keyWindow;
+                UIViewController *vc = win.rootViewController;
+                while (vc.presentedViewController) vc = vc.presentedViewController;
+                // 递归查找按钮
+                void (^findBtn)(UIView *) = ^(UIView *view) {
+                    for (UIView *sub in view.subviews) {
+                        if ([sub isKindOfClass:[UIButton class]]) {
+                            UIButton *btn = (UIButton *)sub;
+                            NSString *t = btn.titleLabel.text;
+                            if (t && ([t containsString:@"跳过"] || [t containsString:@"关闭"] || [t containsString:@"我要更快拿奖"] || [t containsString:@"Skip"])) {
+                                [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
+                                return;
+                            }
+                        }
+                        findBtn(sub);
+                    }
+                };
+                findBtn(vc.view);
+            });
+            return;
+        }
+    }
+    %orig(text);
+}
+
+%end
+
+// ===== 增强：画中画拦截 =====
+%hook AVPictureInPictureController
+
+- (BOOL)isPictureInPicturePossible {
+    return NO;
+}
+
+- (void)startPictureInPicture {
+    // 不执行，阻止进入画中画
+}
+
+- (BOOL)isPictureInPictureActive {
+    return NO;
+}
+
+%end
+
+// ===== 增强：弹窗自动处理（检测到"更快拿奖"弹窗自动点按钮） =====
+%hook UIViewController
+
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    // 延迟检测弹窗内容
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        void (^scanView)(UIView *) = ^(UIView *view) {
+            for (UIView *sub in view.subviews) {
+                if ([sub isKindOfClass:[UILabel class]]) {
+                    UILabel *lab = (UILabel *)sub;
+                    if (lab.text && ([lab.text containsString:@"更快拿奖"] || [lab.text containsString:@"浏览广告"])) {
+                        // 找到弹窗，自动点按钮
+                        void (^findBtn)(UIView *) = ^(UIView *v) {
+                            for (UIView *s in v.subviews) {
+                                if ([s isKindOfClass:[UIButton class]]) {
+                                    UIButton *btn = (UIButton *)s;
+                                    if (btn.titleLabel.text && [btn.titleLabel.text containsString:@"更快拿奖"]) {
+                                        [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
+                                        return;
+                                    }
+                                }
+                                findBtn(s);
+                            }
+                        };
+                        findBtn(view);
+                        return;
+                    }
+                }
+                scanView(sub);
+            }
+        };
+        UIWindow *win = [UIApplication sharedApplication].keyWindow;
+        if (win) scanView(win);
+    });
+}
+
+%end
