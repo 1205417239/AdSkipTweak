@@ -161,26 +161,6 @@
 
 %end
 
-#pragma mark - 配置变更监听
-
-%hook NSObject
-
-+ (void)load {
-    %orig;
-    // 监听配置变更
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(adskipConfigChanged:)
-                                                 name:@"AdSkipConfigChanged"
-                                               object:nil];
-}
-
-+ (void)adskipConfigChanged:(NSNotification *)note {
-    NSLog(@"[AdSkip] 配置已变更，重新加载");
-    [AdSkip loadConfig];
-}
-
-%end
-
 #pragma mark - 构造函数
 
 %ctor {
@@ -188,8 +168,18 @@
         // 初始化管理器
         AdSkipManager *mgr = [AdSkipManager sharedManager];
 
-        // 启用广告 SDK 特定 hook
+        // 启用所有 hook group
+        %init(_ungrouped);
         %init(AdSDKSpecificHooks);
+
+        // 监听配置变更
+        [[NSNotificationCenter defaultCenter] addObserverForName:@"AdSkipConfigChanged"
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification *note) {
+            NSLog(@"[AdSkip] 配置已变更，重新加载");
+            [mgr loadConfig];
+        }];
 
         NSLog(@"[AdSkipTweak] 已加载 v1.0.0");
         NSLog(@"[AdSkipTweak] 启用状态: %d", mgr.enabled);
