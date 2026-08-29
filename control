@@ -1,0 +1,9 @@
+Package: com.adskip.tweak
+Name: AdSkipTweak
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: 广告自动跳过Tweak - 激励视频/插屏/开屏广告自动跳过，基于广告回调伪造原理
+Maintainer: AdSkip
+Author: AdSkip
+Section: Tweaks
+Depends: mobilesubstrate, firmware (>= 14.0)
