@@ -8,6 +8,6 @@ TWEAK_NAME = AdSkipTweak
 
 AdSkipTweak_FILES = Tweak.xm
 AdSkipTweak_CFLAGS = -fobjc-arc -Wno-error
-AdSkipTweak_FRAMEWORKS = UIKit Foundation QuartzCore
+AdSkipTweak_FRAMEWORKS = UIKit Foundation AVFoundation
 
 include $(THEOS_MAKE_PATH)/tweak.mk
