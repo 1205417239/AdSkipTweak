@@ -265,59 +265,94 @@ static void initialize() {
 
 %end
 
-// ===== 增强：弹窗自动关闭（检测到弹窗直接关掉，露出下面广告界面） =====
+// ===== 增强：弹窗保活倒计时（弹窗不关，持续修改第一层倒计时Label） =====
 %hook UIViewController
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-    // 延迟检测弹窗，自动关闭
+    // 延迟检测弹窗（不限字体大小，只要是弹窗）
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIWindow *win = getKeyWindow();
         if (!win) return;
 
-        __block BOOL foundPopup = NO;
-        __block void (^scanView)(UIView *);
-        scanView = ^(UIView *view) {
-            if (foundPopup) return;
+        // 检测弹窗：方式1 - 有presentedViewController；方式2 - 包含"更快拿奖"等关键词的Label
+        __block BOOL hasPopup = NO;
+        UIViewController *top = win.rootViewController;
+        while (top.presentedViewController) {
+            top = top.presentedViewController;
+            hasPopup = YES;
+        }
+
+        __block void (^scanPopup)(UIView *);
+        scanPopup = ^(UIView *view) {
+            if (hasPopup) return;
             for (UIView *sub in view.subviews) {
-                if (foundPopup) break;
+                if (hasPopup) break;
                 if ([sub isKindOfClass:[UILabel class]]) {
                     UILabel *lab = (UILabel *)sub;
                     if (lab.text && ([lab.text containsString:@"更快拿奖"] || [lab.text containsString:@"浏览广告"] || [lab.text containsString:@"秒更快"])) {
-                        foundPopup = YES;
-                        // 找到弹窗，先尝试点关闭按钮(X)
-                        __block void (^findClose)(UIView *);
-                        findClose = ^(UIView *v) {
-                            for (UIView *s in v.subviews) {
-                                if ([s isKindOfClass:[UIButton class]]) {
-                                    UIButton *btn = (UIButton *)s;
-                                    NSString *t = btn.titleLabel.text;
-                                    // 关闭按钮通常没有文字，是X图标，或者accessibilityLabel含"关闭"
-                                    if ((t && ([t containsString:@"关闭"] || [t containsString:@"Skip"] || [t isEqualToString:@"×"] || [t isEqualToString:@"X"])) ||
-                                        (btn.accessibilityLabel && [btn.accessibilityLabel containsString:@"关闭"])) {
-                                        [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
-                                        return;
-                                    }
-                                }
-                                findClose(s);
-                            }
-                        };
-                        findClose(view);
-                        // 如果没点到关闭按钮，直接dismiss当前弹窗
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                            UIViewController *top = win.rootViewController;
-                            while (top.presentedViewController) top = top.presentedViewController;
-                            if (top && top.presentingViewController) {
-                                [top dismissViewControllerAnimated:NO completion:nil];
-                            }
-                        });
+                        hasPopup = YES;
                         return;
                     }
                 }
-                scanView(sub);
+                scanPopup(sub);
             }
         };
-        scanView(win);
+        scanPopup(win);
+
+        if (hasPopup) {
+            // 弹窗存在，启动定时器保活倒计时（持续主动修改第一层倒计时Label为0）
+            __block int tickCount = 0;
+            NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:YES block:^(NSTimer *t) {
+                tickCount++;
+                if (tickCount > 120) { // 最多保活36秒
+                    [t invalidate];
+                    return;
+                }
+
+                UIWindow *w = getKeyWindow();
+                if (!w) return;
+
+                // 遍历查找倒计时Label，直接改成0（不限字体大小）
+                __block void (^findCountdown)(UIView *);
+                findCountdown = ^(UIView *view) {
+                    for (UIView *sub in view.subviews) {
+                        if ([sub isKindOfClass:[UILabel class]]) {
+                            UILabel *lab = (UILabel *)sub;
+                            if (lab.text && lab.text.length > 0) {
+                                NSRegularExpression *reg = [NSRegularExpression regularExpressionWithPattern:@"(\\d+)\\s*秒.*发放|剩余\\s*(\\d+)\\s*秒|(\\d+)\\s*秒|(\\d+)\\s*s|\\d+:\\d+" options:0 error:nil];
+                                NSTextCheckingResult *res = [reg firstMatchInString:lab.text options:0 range:NSMakeRange(0, lab.text.length)];
+                                if (res) {
+                                    dispatch_async(dispatch_get_main_queue(), ^{
+                                        lab.text = @"0秒后发放";
+                                    });
+                                }
+                            }
+                        }
+                        findCountdown(sub);
+                    }
+                };
+                findCountdown(w);
+
+                // 同时尝试点击关闭/跳过按钮（不关弹窗，只点跳过）
+                __block void (^findBtn)(UIView *);
+                findBtn = ^(UIView *view) {
+                    for (UIView *sub in view.subviews) {
+                        if ([sub isKindOfClass:[UIButton class]]) {
+                            UIButton *btn = (UIButton *)sub;
+                            NSString *t = btn.titleLabel.text;
+                            if (t && ([t containsString:@"跳过"] || [t containsString:@"Skip"])) {
+                                [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
+                                return;
+                            }
+                        }
+                        findBtn(sub);
+                    }
+                };
+                findBtn(w);
+            }];
+            [timer fire];
+        }
     });
 }
 
