@@ -25,7 +25,7 @@
         NSTimeInterval delay = AdSkip.graceTime;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             // 先尝试调用广告 SDK 的关闭/完成回调
-            [self tryTriggerAdCallbacks];
+            [self performSelector:@selector(tryTriggerAdCallbacks)];
 
             // 再尝试直接关闭页面
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -104,7 +104,7 @@
     if (AdSkip.enabled) {
         NSLog(@"[AdSkip] 检测到广告展示: onAdShow");
         [AdSkip showSkipHUDWithText:@"广告跳过中..."];
-        [self performSkipAfterGrace];
+        [self performSelector:@selector(performSkipAfterGrace)];
     }
 }
 
@@ -118,7 +118,7 @@
     if (AdSkip.enabled) {
         NSLog(@"[AdSkip] 检测到广告曝光: onAdExposed");
         [AdSkip showSkipHUDWithText:@"广告跳过中..."];
-        [self performSkipAfterGrace];
+        [self performSelector:@selector(performSkipAfterGrace)];
     }
 }
 
