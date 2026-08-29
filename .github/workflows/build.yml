@@ -16,17 +16,17 @@ jobs:
     - name: Install Theos
       run: |
         brew install ldid xz
-        git clone --recursive https://github.com/theos/theos.git $THEOS
-        curl -L https://github.com/theos/sdks/archive/master.tar.gz -o /tmp/sdks.tar.gz
-        tar -xzf /tmp/sdks.tar.gz -C /tmp
-        cp -r /tmp/sdks-master/*.sdk $THEOS/sdks/
+        git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+        # 只下载 iOS SDK（用 Xcode 自带的）
         echo "THEOS=$THEOS" >> $GITHUB_ENV
+        echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
       env:
         THEOS: ${{ github.workspace }}/theos
 
     - name: Build
       run: |
         export THEOS=${{ github.workspace }}/theos
+        export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
         make clean package FINALPACKAGE=1
       env:
         THEOS: ${{ github.workspace }}/theos
