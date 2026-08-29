@@ -214,6 +214,30 @@ static void initialize() {
     hookMethods();
 }
 
+// ===== 方案A：原生视频广告 - AVPlayer 16倍速 =====
+%hook AVPlayer
+
+- (void)setRate:(float)rate {
+    // 广告播放时强制16倍速
+    if (rate > 0.0f && rate <= 1.0f) {
+        %orig(16.0f);
+    } else {
+        %orig(rate);
+    }
+}
+
+- (void)play {
+    %orig;
+    // 延迟设置rate，确保播放器已准备好
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (self.rate > 0.0f && self.rate <= 1.0f) {
+            self.rate = 16.0f;
+        }
+    });
+}
+
+%end
+
 // ===== 核心：H5广告加速 - Hook WKWebView 注入JS =====
 %hook WKWebView
 
