@@ -1,17 +1,17 @@
 #include <iostream>
 #include <string>
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+#import <WebKit/WebKit.h>
 #import <objc/runtime.h>
 #import <substrate.h>
-#import <UIKit/UIKit.h>
-#import <AVFoundation/AVFoundation.h>
 
 //No func
 static BOOL returnNo(id self, SEL _cmd) {
     return NO;
 }
 
-// 辅助：获取keyWindow（兼容iOS13+）
+// 辅助：获取keyWindow
 UIWindow *getKeyWindow() {
     for (UIWindow *w in [UIApplication sharedApplication].windows) {
         if (w.isKeyWindow) return w;
@@ -19,8 +19,32 @@ UIWindow *getKeyWindow() {
     return [UIApplication sharedApplication].windows.firstObject;
 }
 
-// 前向声明
-static void startKeepAliveTimer();
+// H5广告加速JS代码
+static NSString *kAdSpeedJS = @"\
+(function(){\
+  function speed(){\
+    try{\
+      document.querySelectorAll('video').forEach(function(v){\
+        try{ v.playbackRate=16; v.muted=true; v.play(); }catch(e){}\
+      });\
+      var all=document.querySelectorAll('*');\
+      for(var i=0;i<all.length;i++){\
+        var el=all[i];\
+        if(el.childNodes&&el.childNodes.length===1&&el.childNodes[0].nodeType===3){\
+          var t=el.textContent;\
+          if(t&&/\\d+\\s*秒/.test(t)){el.textContent=t.replace(/\\d+\\s*秒/,'0秒');}\
+          if(t&&/\\d+:\\d+/.test(t)){el.textContent='00:00';}\
+          if(t&&/\\d+\\s*s/i.test(t)){el.textContent=t.replace(/\\d+\\s*s/i,'0s');}\
+        }\
+      }\
+    }catch(e){}\
+  }\
+  speed();\
+  try{\
+    new MutationObserver(speed).observe(document.body||document.documentElement,{childList:true,subtree:true,characterData:true});\
+  }catch(e){}\
+  setInterval(speed,500);\
+})();";
 
 //Find almost function that contains ads in almost games apps
 void hookMethods() {
@@ -60,18 +84,14 @@ void hookMethods() {
     MSHookMessageEx(objc_getClass("SCSnapAdsServeResponseDataStore"), @selector(removeAdResponseForIdentifier:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSNetService"), @selector(publish), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSNetService"), @selector(stop), (IMP)returnNo, NULL);
-    //MSHookMessageEx(objc_getClass("NSNetService"), @selector(dealloc), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSNetService"), @selector(addresses), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSNetService"), @selector(initWithCFNetService:), (IMP)returnNo, NULL);
-    //MSHookMessageEx(objc_getClass("NSNetServiceBrowser"), @selector(dealloc), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSNetServiceBrowser"), @selector(stop), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLConnectionInternalConnection"), @selector(cancelAuthenticationChallenge:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLConnectionInternalConnection"), @selector(_timingData), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLSessionTaskHTTPAuthenticator"), @selector(sessionTaskHTTPAuthenticatorWithContext:statusCodes:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLSessionTaskHTTPAuthenticator"), @selector(setStatusCodes:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLSessionTaskLocalHTTPAuthenticator"), @selector(externalAuthenticator), (IMP)returnNo, NULL);
-    //MSHookMessageEx(objc_getClass("NWStreamPair"), @selector(dealloc), (IMP)returnNo, NULL);
-    //MSHookMessageEx(objc_getClass("__NSCFURLLocalStreamTaskFromDataTaskDataBlobby"), @selector(dealloc), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("__NSCFURLSessionTaskGroup"), @selector(dataTaskWithRequest:completionHandler:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("__NSCFURLSessionTaskGroup"), @selector(forwardingTargetForSelector:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("__NSCFURLSessionTaskGroup"), @selector(dataTaskWithRequest:), (IMP)returnNo, NULL);
@@ -80,8 +100,6 @@ void hookMethods() {
     MSHookMessageEx(objc_getClass("__NSCFURLSessionTaskGroup"), @selector(_groupSession), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLConnectionInternal"), @selector(useCredential:forAuthenticationChallenge:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLConnectionInternal"), @selector(_timingData), (IMP)returnNo, NULL);
-    //MSHookMessageEx(objc_getClass("NSURLSessionTaskBackgroundHTTPAuthenticator"), @selector(dealloc), (IMP)returnNo, NULL);
-    //MSHookMessageEx(objc_getClass("NSURLSessionTaskDependency"), @selector(dealloc), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("__NSCFURLSessionXPC"), @selector(initialize), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("FPUserCredentials"), @selector(adremoval_enabled), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("ALIncentivizedInterstitialAd"), @selector(isReadyForDisplay), (IMP)returnNo, NULL);
@@ -166,14 +184,13 @@ void hookMethods() {
     MSHookMessageEx(objc_getClass("ALMediationAdapterRouter"), @selector(isAdShowingForAdapter:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("ALNativeAdService"), @selector(loadNextAdAndNotify:), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("APMPersistedConfig"), @selector(allowPersonalizedAds), (IMP)returnNo, NULL);
-    
+
     MSHookMessageEx(objc_getClass("NSNetService"), sel_getUid("dealloc"), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSNetServiceBrowser"), sel_getUid("dealloc"), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NWStreamPair"), sel_getUid("dealloc"), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("__NSCFURLLocalStreamTaskFromDataTaskDataBlobby"), sel_getUid("dealloc"), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLSessionTaskBackgroundHTTPAuthenticator"), sel_getUid("dealloc"), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("NSURLSessionTaskDependency"), sel_getUid("dealloc"), (IMP)returnNo, NULL);
-
     //also return no for jb detect
     MSHookMessageEx(objc_getClass("BUDeviceHelper"), @selector(bu_isJailBroken), (IMP)returnNo, NULL);
     MSHookMessageEx(objc_getClass("EBAppLogDeviceHelper"), @selector(isJailBroken), (IMP)returnNo, NULL);
@@ -195,79 +212,47 @@ void hookMethods() {
 __attribute__((constructor))
 static void initialize() {
     hookMethods();
-    // 延迟启动全局保活定时器（等待App初始化完成）
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        startKeepAliveTimer();
-    });
 }
 
-//skip ads if it was a video player
-%hook AVPlayer
+// ===== 核心：H5广告加速 - Hook WKWebView 注入JS =====
+%hook WKWebView
 
-- (void)setRate:(float)rate {
-    if (rate > 0) {
-        // 正常播放时加速600倍
-        %orig(rate * 600.0f);
-    } else {
-        // 阻止暂停！rate=0时强制改成600，弹窗暂停也没用
-        %orig(600.0f);
+- (void)loadRequest:(NSURLRequest *)request {
+    %orig;
+    [self performSelector:@selector(injectAdSpeedJS) withObject:nil afterDelay:1.0];
+}
+
+- (void)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL {
+    %orig;
+    [self performSelector:@selector(injectAdSpeedJS) withObject:nil afterDelay:1.0];
+}
+
+- (void)loadFileURL:(NSURL *)URL allowingReadAccessToURL:(NSURL *)readAccessURL {
+    %orig;
+    [self performSelector:@selector(injectAdSpeedJS) withObject:nil afterDelay:1.0];
+}
+
+- (void)loadData:(NSData *)data MIMEType:(NSString *)MIMEType characterEncodingName:(NSString *)characterEncodingName baseURL:(NSURL *)baseURL {
+    %orig;
+    [self performSelector:@selector(injectAdSpeedJS) withObject:nil afterDelay:1.0];
+}
+
+%new
+- (void)injectAdSpeedJS {
+    if ([self respondsToSelector:@selector(evaluateJavaScript:completionHandler:)]) {
+        [self evaluateJavaScript:kAdSpeedJS completionHandler:^(id result, NSError *error) {
+            if (error) {
+                NSLog(@"[AdSkip] JS注入失败: %@", error.localizedDescription);
+            } else {
+                NSLog(@"[AdSkip] H5广告加速JS注入成功");
+            }
+        }];
     }
-}
-
-- (float)rate{
- float r = %orig;
- return r * 0.5f;
-}
-
-- (void)pause {
-    // 不执行暂停，强制恢复播放并加速
-    [self play];
-    [self setRate:600.0f];
-}
-
-%end
-// ===== 增强：倒计时Label直接修改 =====
-%hook UILabel
-
-- (void)setText:(NSString *)text {
-    if (text && text.length > 0) {
-        // 匹配各种倒计时模式: "30秒后发放" "剩余30秒" "30s" "00:30" "30秒"
-        NSRegularExpression *reg = [NSRegularExpression regularExpressionWithPattern:@"(\\d+)\\s*秒.*发放|剩余\\s*(\\d+)\\s*秒|(\\d+)\\s*秒|(\\d+)\\s*s|\\d+:\\d+" options:0 error:nil];
-        NSTextCheckingResult *res = [reg firstMatchInString:text options:0 range:NSMakeRange(0, text.length)];
-        if (res) {
-            // 直接改成0，让倒计时瞬间结束
-            %orig(@"0秒后发放");
-            // 延迟尝试点击关闭/跳过按钮
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                UIWindow *win = getKeyWindow();
-                UIViewController *vc = win.rootViewController;
-                while (vc.presentedViewController) vc = vc.presentedViewController;
-                // 递归查找按钮
-                __block void (^findBtn)(UIView *);
-                findBtn = ^(UIView *view) {
-                    for (UIView *sub in view.subviews) {
-                        if ([sub isKindOfClass:[UIButton class]]) {
-                            UIButton *btn = (UIButton *)sub;
-                            NSString *t = btn.titleLabel.text;
-                            if (t && ([t containsString:@"跳过"] || [t containsString:@"关闭"] || [t containsString:@"Skip"])) {
-                                [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
-                                return;
-                            }
-                        }
-                        findBtn(sub);
-                    }
-                };
-                findBtn(vc.view);
-            });
-            return;
-        }
-    }
-    %orig(text);
 }
 
 %end
 
-// ===== 增强：画中画拦截 =====
+// ===== 画中画拦截 =====
 %hook AVPictureInPictureController
 
 - (BOOL)isPictureInPicturePossible {
@@ -275,7 +260,7 @@ static void initialize() {
 }
 
 - (void)startPictureInPicture {
-    // 不执行，阻止进入画中画
+    // 不执行
 }
 
 - (BOOL)isPictureInPictureActive {
@@ -283,70 +268,3 @@ static void initialize() {
 }
 
 %end
-
-// ===== 增强：全局保活定时器（不管弹窗，持续保活第一层倒计时+AVPlayer） =====
-static void startKeepAliveTimer() {
-    static NSTimer *keepAliveTimer = nil;
-    if (keepAliveTimer) return;
-
-    keepAliveTimer = [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:YES block:^(NSTimer *t) {
-        UIWindow *w = getKeyWindow();
-        if (!w) return;
-
-        // 1. 遍历查找倒计时Label，直接改成0（不限字体大小，不限层级）
-        __block void (^findCountdown)(UIView *);
-        findCountdown = ^(UIView *view) {
-            for (UIView *sub in view.subviews) {
-                if ([sub isKindOfClass:[UILabel class]]) {
-                    UILabel *lab = (UILabel *)sub;
-                    if (lab.text && lab.text.length > 0) {
-                        NSRegularExpression *reg = [NSRegularExpression regularExpressionWithPattern:@"(\\d+)\\s*秒.*发放|剩余\\s*(\\d+)\\s*秒|(\\d+)\\s*秒|(\\d+)\\s*s|\\d+:\\d+" options:0 error:nil];
-                        NSTextCheckingResult *res = [reg firstMatchInString:lab.text options:0 range:NSMakeRange(0, lab.text.length)];
-                        if (res) {
-                            dispatch_async(dispatch_get_main_queue(), ^{
-                                lab.text = @"0秒后发放";
-                            });
-                        }
-                    }
-                }
-                findCountdown(sub);
-            }
-        };
-        findCountdown(w);
-
-        // 2. 遍历查找AVPlayer，持续设置rate=600（弹窗可能暂停播放器，这里强制恢复并加速）
-        __block void (^findAVPlayer)(UIView *);
-        findAVPlayer = ^(UIView *view) {
-            for (UIView *sub in view.subviews) {
-                if ([sub isKindOfClass:NSClassFromString(@"AVPlayerView")] ||
-                    [sub isKindOfClass:NSClassFromString(@"AVPlayerLayerView")]) {
-                    // 尝试获取player并设置rate
-                    id player = [sub valueForKey:@"player"];
-                    if (player && [player respondsToSelector:@selector(setRate:)]) {
-                        [player setRate:600.0f];
-                    }
-                }
-                findAVPlayer(sub);
-            }
-        };
-        findAVPlayer(w);
-
-        // 3. 查找"跳过"按钮并点击
-        __block void (^findBtn)(UIView *);
-        findBtn = ^(UIView *view) {
-            for (UIView *sub in view.subviews) {
-                if ([sub isKindOfClass:[UIButton class]]) {
-                    UIButton *btn = (UIButton *)sub;
-                    NSString *t = btn.titleLabel.text;
-                    if (t && ([t containsString:@"跳过"] || [t containsString:@"Skip"])) {
-                        [btn sendActionsForControlEvents:UIControlEventTouchUpInside];
-                        return;
-                    }
-                }
-                findBtn(sub);
-            }
-        };
-        findBtn(w);
-    }];
-    [keepAliveTimer fire];
-}
