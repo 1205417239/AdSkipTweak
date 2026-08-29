@@ -3,6 +3,8 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <substrate.h>
+#import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
 
 //No func
 static BOOL returnNo(id self, SEL _cmd) {
